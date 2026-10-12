@@ -28,7 +28,7 @@ target_raw = os.getenv("TARGET_USER_ID", "8760199253").strip()
 TARGET_USER_ID = int(target_raw) if target_raw.isdigit() else 8760199253
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6K09ACXbnHqCflsIdrss9bJPcbvDavKOY07YLaaFMtP1w").strip().strip('"').strip("'")
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-1.5-flash")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash")
 
 # Опционально: если есть прокси для обхода блокировки РФ (например: http://login:pass@ip:port)
 PROXY_URL = os.getenv("PROXY_URL", "").strip() or None
