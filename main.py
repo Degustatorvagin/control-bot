@@ -114,7 +114,7 @@ async def call_gemini(raw_history: list, system_instruction: str) -> tuple[str, 
     }
 
     last_error = ""
-    candidate_models = [MODEL_NAME, "gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"]
+    candidate_models = [MODEL_NAME, "gemini-3.5-flash", "gemini-3.5-flash", "gemini-3.5-flash"]
     unique_models = list(dict.fromkeys([m for m in candidate_models if m]))
 
     async with aiohttp.ClientSession() as session:
