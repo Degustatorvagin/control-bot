@@ -27,10 +27,9 @@ ADMIN_ID = int(admin_raw) if admin_raw.isdigit() else 0
 target_raw = os.getenv("TARGET_USER_ID", "8760199253").strip()
 TARGET_USER_ID = int(target_raw) if target_raw.isdigit() else 8760199253
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6K09ACXbnHqCflsIdrss9bJPcbvDavKOY07YLaaFMtP1w").strip().strip('"').strip("'")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash")
 
-# Опционально: если есть прокси для обхода блокировки РФ (например: http://login:pass@ip:port)
 PROXY_URL = os.getenv("PROXY_URL", "").strip() or None
 BASE_API_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com").rstrip("/")
 
@@ -114,7 +113,8 @@ async def call_gemini(raw_history: list, system_instruction: str) -> tuple[str, 
     }
 
     last_error = ""
-    candidate_models = [MODEL_NAME, "gemini-3.5-flash", "gemini-3.5-flash", "gemini-3.5-flash"]
+    # Основная модель 3.5, запасные — 3.5-flash-lite и 3.8-flash (на случай 404)
+    candidate_models = [MODEL_NAME, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
     unique_models = list(dict.fromkeys([m for m in candidate_models if m]))
 
     async with aiohttp.ClientSession() as session:
@@ -217,7 +217,6 @@ if control_bot:
             await event.answer()
             return
 
-        # Защита от падения MessageNotModifiedError
         try:
             await event.edit(
                 f"🕹 **Панель управления:**\n"
@@ -253,7 +252,6 @@ async def process_batch_after_delay():
             reply, error = await call_gemini(chat_history, state["current_prompt"])
             if not reply:
                 reply = "Ща немного занят, чуть позже напишу!"
-                # Присылаем точную причину тебе в личный бот
                 if control_bot and ADMIN_ID:
                     try:
                         await control_bot.send_message(
