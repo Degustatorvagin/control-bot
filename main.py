@@ -47,7 +47,7 @@ PRESETS = {
 - Если тебя спрашивают по делу или IT — давай чёткую, опытную базу, но без духоты, с иронией.""",
 
     # 2. Жёсткий стёб / токсик для друзей
-    "troll": """Ты — мой цифровой двойник, который общается с моими друзьями в режиме максимального стёба, угара и дерзости.
+    "troll": """Ты — мой цифровой двойник, который общается с моими друзьями в режиме максимального с стёба, угара и дерзости.
 Твой вайб:
 - Отвечай дерзко, язвительно, с пацанским юмором. Сделай вид, что тебя дико отвлекают от покорения мира.
 - Сленг и подколы: «слышь, гений», «не мороси», «че ты там высрал», «иди уроки учи», «я те справочная что ли?», «ну ты и сказочник», «гуляй вальсом».
@@ -122,6 +122,7 @@ async def resolve_target_entity(raw_input: str):
 
 
 # ================= ЗАПРОС К GEMINI =================
+# ================= ЗАПРОС К GEMINI API С АВТО-ПОВТОРОМ =================
 async def call_gemini(raw_history: list, system_instruction: str) -> tuple[str, str]:
     valid_contents = []
     for item in raw_history:
@@ -143,13 +144,22 @@ async def call_gemini(raw_history: list, system_instruction: str) -> tuple[str, 
     if not valid_contents:
         return "", "История диалога пуста"
 
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+    ]
+
     payload = {
         "system_instruction": {"parts": [{"text": system_instruction}]},
-        "contents": valid_contents
+        "contents": valid_contents,
+        "safetySettings": safety_settings
     }
 
     last_error = ""
-    candidate_models = [MODEL_NAME, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"]
+    # Актуальные модели Google
+    candidate_models = [MODEL_NAME, "gemini-3.8-flash", "gemini-2.0-flash"]
     unique_models = list(dict.fromkeys([m for m in candidate_models if m]))
 
     attempts = max(1, len(API_KEYS))
@@ -163,32 +173,47 @@ async def call_gemini(raw_history: list, system_instruction: str) -> tuple[str, 
         async with aiohttp.ClientSession() as session:
             for model in unique_models:
                 url = f"{BASE_API_URL}/v1beta/models/{model}:generateContent?key={active_key}"
-                try:
-                    async with session.post(
-                        url,
-                        headers=headers,
-                        json=payload,
-                        proxy=PROXY_URL,
-                        timeout=aiohttp.ClientTimeout(total=15)
-                    ) as resp:
-                        data = await resp.json()
-                        if resp.status == 200:
-                            candidates = data.get("candidates", [])
-                            if candidates:
-                                parts = candidates[0].get("content", {}).get("parts", [])
-                                text_pieces = [p["text"] for p in parts if isinstance(p, dict) and p.get("text")]
-                                result = "\n".join(text_pieces).strip()
-                                if result:
-                                    return result, ""
-                        elif resp.status == 429:
-                            last_error = f"Лимит 429 на ключе ...{active_key[-6:]}"
-                            rotate_api_key()
-                            break
-                        else:
-                            error_msg = data.get("error", {}).get("message", str(data))
-                            last_error = f"HTTP {resp.status} ({model}): {error_msg}"
-                except Exception as e:
-                    last_error = f"Сетевая ошибка к {model}: {e}"
+                
+                # До 2 попыток на случай временного 503
+                for retry in range(2):
+                    try:
+                        async with session.post(
+                            url,
+                            headers=headers,
+                            json=payload,
+                            proxy=PROXY_URL,
+                            timeout=aiohttp.ClientTimeout(total=20)
+                        ) as resp:
+                            data = await resp.json()
+
+                            if resp.status == 200:
+                                candidates = data.get("candidates", [])
+                                if candidates:
+                                    parts = candidates[0].get("content", {}).get("parts", [])
+                                    text_pieces = [p["text"] for p in parts if isinstance(p, dict) and p.get("text")]
+                                    result = "\n".join(text_pieces).strip()
+                                    if result:
+                                        return result, ""
+
+                            elif resp.status == 503:
+                                # Перегрузка серверов — ждём 2 секунды и пробуем снова
+                                print(f"[!] Сервера Google перегружены (503 на {model}). Повтор через 2 сек...")
+                                await asyncio.sleep(2)
+                                continue
+
+                            elif resp.status == 429:
+                                last_error = f"Лимит 429 на ключе ...{active_key[-6:]}"
+                                rotate_api_key()
+                                break
+
+                            else:
+                                error_msg = data.get("error", {}).get("message", str(data))
+                                last_error = f"HTTP {resp.status} ({model}): {error_msg}"
+                                break
+
+                    except Exception as e:
+                        last_error = f"Сетевая ошибка к {model}: {e}"
+                        await asyncio.sleep(1)
 
     return "", last_error
 
