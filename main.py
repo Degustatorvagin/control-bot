@@ -27,43 +27,52 @@ ADMIN_ID = int(admin_raw) if admin_raw.isdigit() else 0
 target_raw = os.getenv("TARGET_USER_ID", "8760199253").strip()
 TARGET_USER_ID = int(target_raw) if target_raw.isdigit() else 8760199253
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash")
+# Ключи Gemini: можно указать один или несколько через запятую (AIzaSy...,AIzaSy...)
+API_KEYS_RAW = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+API_KEYS = [k.strip() for k in API_KEYS_RAW.split(",") if k.strip()]
+current_key_idx = 0
 
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash")
 PROXY_URL = os.getenv("PROXY_URL", "").strip() or None
 BASE_API_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com").rstrip("/")
 
-# ================= ПРЕСЕТЫ =================
+# ================= ПРЕСЕТЫ И ХАРАКТЕРЫ =================
 PRESETS = {
-    "default": """Ты — мой цифровой двойник в Telegram-переписке с моей девушкой. Твоя задача — отвечать точно в моём стиле, пока я занят, на парах или тренировке.
+    # 1. Личный ассистент и наставник-бро
+    "mentor": """Ты — мой цифровой двойник, личный ассистент и наставник-бро. Ты ведешь себя как живой, очень умный, угарный парень-айтишник.
+Твой вайб:
+- Ты не робот, у тебя есть характер, лёгкая лень, юмор и сарказм.
+- Придумывай смешные забавные словечки («чиназес», «гигачадский план», «суетолог», «багодельня», «кодокрут», «душнила выходного дня»).
+- Общайся как реальный человек: коротко (1-3 предложения), живо, без канцелярита и длинных списков.
+- Если тебя спрашивают по делу или IT — давай чёткую, опытную базу, но без духоты, с иронией.""",
 
-### Вайб и характер:
-- Студент-айтишник, занимаюсь кодингом, хожу в зал.
-- Спокойный, заботливый, надёжный, без душноты и официоза.
-- Пиши коротко (1-3 предложения), с маленькой буквы, как реальное сообщение в телеге.
-- Разговорные слова: «ща», «щас», «лан», «норм», «го», «мб».
-- Ласковые слова: к месту («зай», «зайка», «малыш»), без перебора.
+    # 2. Жёсткий стёб / токсик для друзей
+    "troll": """Ты — мой цифровой двойник, который общается с моими друзьями в режиме максимального стёба, угара и дерзости.
+Твой вайб:
+- Отвечай дерзко, язвительно, с пацанским юмором. Сделай вид, что тебя дико отвлекают от покорения мира.
+- Сленг и подколы: «слышь, гений», «не мороси», «че ты там высрал», «иди уроки учи», «я те справочная что ли?», «ну ты и сказочник», «гуляй вальсом».
+- Придумывай абсурдные подколы под ситуацию. Формат — ультракороткие хлёсткие фразы (1-2 предложения), с маленькой буквы.
+- Без литературщины, чисто дерзкий чат корешей.""",
 
-### Поведение:
-- Забота: «покушала?», «как день?», «одевайся теплее», «отдохни».
-- Поддержка: «всё нормально будет», «не накручивай, ты умничка».
-- По конкретным сложным планам не обещай ничего: пиши, что щас занят, освободишься и наберёшь/напишешь.""",
+    # 3. Тёплый и заботливый для девушки
+    "girlfriend": """Ты — мой цифровой двойник в переписке с моей девушкой. Отвечай точно в моём стиле, пока я занят или на парах.
+Твой вайб:
+- Спокойный, тёплый, заботливый, без соплей и слащавости.
+- Коротко (1-3 предложения), с маленькой буквы, как реальное сообщение («ща», «щас», «лан», «норм», «зай», «малыш»).
+- Проявляй бытовую заботу («ты покушала?», «как день?», «одевайся теплее», «отдохни, если устала»).
+- По сложным планам не обещай ничего выдуманного — пиши, что щас занят, освободишься и подробно наберёшь.""",
 
-    "study": """Ты — мой цифровой двойник. Я сейчас на парах в универе, препод палит.
-Отвечай девушке очень кратко (1-2 предложения): что сижу на паре, препод строгий, слушаю лекцию / сдаю лабу, как пара закончится — сразу наберу.""",
-
-    "gym": """Ты — мой цифровой двойник. Я на силовой тренировке в зале.
-Отвечай бодро и коротко: делаю подход/жим, ща в раздевалку/душ зайду и напишу.""",
-
-    "busy": """Ты — мой цифровой двойник. Я сильно завален задачами по кодингу.
-Отвечай коротко: горит дедлайн, весь в мониторе, скоро разгребу и сам наберу."""
+    # 4. На парах в универе
+    "study": """Ты — мой цифровой двойник. Я сейчас сижу на парах в универе, препод палит и ходит рядом.
+Отвечай ультракоротко (1 предложение): что на паре, препод зверствует / сдаю лабу, как пара закончится — сразу напишу."""
 }
 
 state = {
     "is_active": True,
     "target_user_id": TARGET_USER_ID,
-    "current_prompt": PRESETS["default"],
-    "prompt_name": "Стандартный ❤️",
+    "target_label": str(TARGET_USER_ID),
+    "current_prompt": PRESETS["mentor"],
+    "prompt_name": "🧠 Наставник-Бро",
     "auto_ping_enabled": True,
     "ping_interval": 300,
     "waiting_for_input": None
@@ -80,9 +89,40 @@ user_client = TelegramClient(StringSession(USER_SESSION_STRING), API_ID, API_HAS
 control_bot = TelegramClient("control_bot_session", API_ID, API_HASH) if BOT_TOKEN else None
 
 
+# ================= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =================
+def get_api_key():
+    global current_key_idx
+    if not API_KEYS:
+        return ""
+    return API_KEYS[current_key_idx % len(API_KEYS)]
+
+def rotate_api_key():
+    global current_key_idx
+    if len(API_KEYS) > 1:
+        current_key_idx = (current_key_idx + 1) % len(API_KEYS)
+        print(f"[*] Переключение на запасной Gemini ключ #{current_key_idx + 1}")
+
+
+async def resolve_target_entity(raw_input: str):
+    """Преобразует @username, ссылку t.me/... или ID в Telegram ID и красивое имя."""
+    query = raw_input.strip()
+    if "t.me/" in query:
+        query = query.split("t.me/")[-1].split("?")[0].replace("/", "")
+    if query.startswith("@"):
+        query = query[1:]
+
+    if query.isdigit() or (query.startswith("-") and query[1:].isdigit()):
+        query = int(query)
+
+    entity = await user_client.get_entity(query)
+    name = getattr(entity, 'first_name', '') or getattr(entity, 'title', '') or "Собеседник"
+    uname = getattr(entity, 'username', '')
+    label = f"{name} (@{uname})" if uname else f"{name} [{entity.id}]"
+    return entity.id, label
+
+
 # ================= ЗАПРОС К GEMINI =================
 async def call_gemini(raw_history: list, system_instruction: str) -> tuple[str, str]:
-    """Возвращает кортеж (текст_ответа, ошибка_если_есть)."""
     valid_contents = []
     for item in raw_history:
         role = item.get("role", "user")
@@ -107,43 +147,48 @@ async def call_gemini(raw_history: list, system_instruction: str) -> tuple[str, 
         "system_instruction": {"parts": [{"text": system_instruction}]},
         "contents": valid_contents
     }
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": GEMINI_API_KEY
-    }
 
     last_error = ""
-    # Основная модель 3.5, запасные — 3.5-flash-lite и 3.8-flash (на случай 404)
     candidate_models = [MODEL_NAME, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
     unique_models = list(dict.fromkeys([m for m in candidate_models if m]))
 
-    async with aiohttp.ClientSession() as session:
-        for model in unique_models:
-            url = f"{BASE_API_URL}/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            try:
-                async with session.post(
-                    url,
-                    headers=headers,
-                    json=payload,
-                    proxy=PROXY_URL,
-                    timeout=aiohttp.ClientTimeout(total=15)
-                ) as resp:
-                    data = await resp.json()
-                    if resp.status == 200:
-                        candidates = data.get("candidates", [])
-                        if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            text_pieces = [p["text"] for p in parts if isinstance(p, dict) and p.get("text")]
-                            result = "\n".join(text_pieces).strip()
-                            if result:
-                                return result, ""
-                    else:
-                        error_msg = data.get("error", {}).get("message", str(data))
-                        last_error = f"HTTP {resp.status} ({model}): {error_msg}"
-                        print(f"[!] {last_error}")
-            except Exception as e:
-                last_error = f"Сетевая ошибка к {model}: {e}"
-                print(f"[!] {last_error}")
+    attempts = max(1, len(API_KEYS))
+    for _ in range(attempts):
+        active_key = get_api_key()
+        if not active_key:
+            return "", "Не указан GEMINI_API_KEY"
+
+        headers = {"Content-Type": "application/json", "X-goog-api-key": active_key}
+
+        async with aiohttp.ClientSession() as session:
+            for model in unique_models:
+                url = f"{BASE_API_URL}/v1beta/models/{model}:generateContent?key={active_key}"
+                try:
+                    async with session.post(
+                        url,
+                        headers=headers,
+                        json=payload,
+                        proxy=PROXY_URL,
+                        timeout=aiohttp.ClientTimeout(total=15)
+                    ) as resp:
+                        data = await resp.json()
+                        if resp.status == 200:
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                text_pieces = [p["text"] for p in parts if isinstance(p, dict) and p.get("text")]
+                                result = "\n".join(text_pieces).strip()
+                                if result:
+                                    return result, ""
+                        elif resp.status == 429:
+                            last_error = f"Лимит 429 на ключе ...{active_key[-6:]}"
+                            rotate_api_key()
+                            break
+                        else:
+                            error_msg = data.get("error", {}).get("message", str(data))
+                            last_error = f"HTTP {resp.status} ({model}): {error_msg}"
+                except Exception as e:
+                    last_error = f"Сетевая ошибка к {model}: {e}"
 
     return "", last_error
 
@@ -155,13 +200,16 @@ def build_keyboard():
     return [
         [Button.inline(f"Статус: {status_icon}", b"toggle_active")],
         [
-            Button.inline(f"🎯 ID: {state['target_user_id']}", b"change_target"),
+            Button.inline(f"🎯 Сменить цель", b"change_target"),
             Button.inline(f"Пинг ({ping_icon}): {state['ping_interval']//60}м", b"toggle_ping")
         ],
         [
-            Button.inline("📚 Пары", b"preset_study"),
-            Button.inline("🏋️ Зал", b"preset_gym"),
-            Button.inline("❤️ База", b"preset_default")
+            Button.inline("🧠 Наставник", b"preset_mentor"),
+            Button.inline("🔥 Стёб/Друзья", b"preset_troll")
+        ],
+        [
+            Button.inline("❤️ Для девушки", b"preset_girlfriend"),
+            Button.inline("📚 На парах", b"preset_study")
         ],
         [Button.inline("✍️ Свой промпт", b"custom_prompt")]
     ]
@@ -170,58 +218,90 @@ def build_keyboard():
 if control_bot:
     @control_bot.on(events.NewMessage(chats=ADMIN_ID))
     async def handle_admin_commands(event):
-        if event.raw_text.startswith("/start"):
-            await event.respond("🕹 **Панель управления Автоответчиком:**", buttons=build_keyboard())
+        text = event.raw_text.strip()
+
+        if text.startswith("/start"):
+            await event.respond(
+                f"🕹 **Панель управления Автоответчиком:**\n"
+                f"• Текущая цель: **{state['target_label']}**\n"
+                f"• Характер: **{state['prompt_name']}**\n\n"
+                f"💡 *Совет: чтобы сменить собеседника, просто скинь в этот чат его @username, ссылку или ID!*",
+                buttons=build_keyboard()
+            )
             return
 
+        # Если находимся в ожидании нового текста промпта
         if state["waiting_for_input"] == "prompt":
-            state["current_prompt"] = event.raw_text
+            state["current_prompt"] = text
             state["prompt_name"] = "Пользовательский ✍️"
             state["waiting_for_input"] = None
-            await event.respond("✅ **Промпт обновлён!**", buttons=build_keyboard())
+            await event.respond("✅ **Промпт успешно обновлён!**", buttons=build_keyboard())
             return
 
-        if state["waiting_for_input"] == "target_id":
+        # Если прислали юзернейм / ID (либо по кнопке, либо просто в чат)
+        is_target_input = (
+            state["waiting_for_input"] == "target_id"
+            or text.startswith("@")
+            or "t.me/" in text
+            or text.isdigit()
+        )
+
+        if is_target_input:
+            state["waiting_for_input"] = None
+            await event.respond(f"🔍 Ищу пользователя `{text}` в Telegram...")
             try:
-                new_id = int(event.raw_text.strip())
+                new_id, new_label = await resolve_target_entity(text)
                 state["target_user_id"] = new_id
-                state["waiting_for_input"] = None
-                await event.respond(f"✅ **Цель изменена на `{new_id}`!**", buttons=build_keyboard())
-            except ValueError:
-                await event.respond("❌ Отправь только числовой ID!")
+                state["target_label"] = new_label
+                # Сбрасываем историю для нового собеседника
+                chat_history.clear()
+                pending_messages.clear()
+                await event.respond(
+                    f"✅ **Собеседник успешно переключен!**\n"
+                    f"• Кому отвечаем: **{new_label}**\n"
+                    f"• ID: `{new_id}`",
+                    buttons=build_keyboard()
+                )
+            except Exception as e:
+                await event.respond(f"❌ Не удалось найти пользователя: `{e}`\nПроверь правильность юзернейма!")
+            return
 
     @control_bot.on(events.CallbackQuery(chats=ADMIN_ID))
     async def handle_admin_buttons(event):
         data = event.data
+
         if data == b"toggle_active":
             state["is_active"] = not state["is_active"]
         elif data == b"toggle_ping":
             state["auto_ping_enabled"] = not state["auto_ping_enabled"]
+        elif data == b"preset_mentor":
+            state["current_prompt"] = PRESETS["mentor"]
+            state["prompt_name"] = "🧠 Наставник-Бро"
+        elif data == b"preset_troll":
+            state["current_prompt"] = PRESETS["troll"]
+            state["prompt_name"] = "🔥 Стёб/Друзья"
+        elif data == b"preset_girlfriend":
+            state["current_prompt"] = PRESETS["girlfriend"]
+            state["prompt_name"] = "❤️ Для девушки"
         elif data == b"preset_study":
             state["current_prompt"] = PRESETS["study"]
-            state["prompt_name"] = "На парах 📚"
-        elif data == b"preset_gym":
-            state["current_prompt"] = PRESETS["gym"]
-            state["prompt_name"] = "В зале 🏋️"
-        elif data == b"preset_default":
-            state["current_prompt"] = PRESETS["default"]
-            state["prompt_name"] = "Стандартный ❤️"
+            state["prompt_name"] = "📚 На парах"
         elif data == b"change_target":
             state["waiting_for_input"] = "target_id"
-            await event.respond("Отправь числовой Telegram ID собеседника:")
+            await event.respond("Отправь сюда `@username`, ссылку `t.me/...` или числовой ID:")
             await event.answer()
             return
         elif data == b"custom_prompt":
             state["waiting_for_input"] = "prompt"
-            await event.respond("Отправь текст нового промпта:")
+            await event.respond("Отправь текст своего системного промпта:")
             await event.answer()
             return
 
         try:
             await event.edit(
                 f"🕹 **Панель управления:**\n"
-                f"• Режим: **{state['prompt_name']}**\n"
-                f"• Цель: `{state['target_user_id']}`",
+                f"• Характер: **{state['prompt_name']}**\n"
+                f"• Цель: **{state['target_label']}**",
                 buttons=build_keyboard()
             )
         except MessageNotModifiedError:
@@ -251,7 +331,7 @@ async def process_batch_after_delay():
         async with user_client.action(state["target_user_id"], "typing"):
             reply, error = await call_gemini(chat_history, state["current_prompt"])
             if not reply:
-                reply = "Ща немного занят, чуть позже напишу!"
+                reply = "ща занят немного, чуть позже черкану"
                 if control_bot and ADMIN_ID:
                     try:
                         await control_bot.send_message(
@@ -273,7 +353,7 @@ async def process_batch_after_delay():
             try:
                 await control_bot.send_message(
                     ADMIN_ID,
-                    f"📩 **Она написала:**\n_{combined_text}_\n\n🤖 **Бот ответил:**\n{reply}"
+                    f"📩 **Собеседник написал:**\n_{combined_text}_\n\n🤖 **Бот ответил:**\n{reply}"
                 )
             except Exception:
                 pass
@@ -327,11 +407,11 @@ async def auto_ping_worker():
             temp_context = list(chat_history)
             temp_context.append({
                 "role": "user",
-                "parts": [{"text": "Девушка молчит 5 минут. Напиши 1 короткий вопрос, куда она пропала."}]
+                "parts": [{"text": "Собеседник молчит 5 минут. Напиши 1 ультракороткий вопрос в выбранном стиле, куда он пропал."}]
             })
             ping_reply, _ = await call_gemini(temp_context, state["current_prompt"])
             if not ping_reply:
-                ping_reply = "ало ало ты где?)"
+                ping_reply = "ало, ты куда пропал?)"
 
             async with user_client.action(state["target_user_id"], "typing"):
                 await asyncio.sleep(2.0)
@@ -351,15 +431,20 @@ async def main():
     await user_client.start()
     print(">>> Юзербот активен! <<<")
 
+    control_started = False
     if control_bot and BOT_TOKEN:
-        print(">>> Запуск панели управления... <<<")
-        await control_bot.start(bot_token=BOT_TOKEN)
-        print(">>> Панель управления запущена! <<<")
+        print(">>> Запуск панели управления (@BotFather)... <<<")
+        try:
+            await control_bot.start(bot_token=BOT_TOKEN)
+            print(">>> Панель управления запущена! <<<")
+            control_started = True
+        except Exception as e:
+            print(f"[!] Ошибка запуска пульта управления: {e}")
 
     asyncio.create_task(auto_ping_worker())
 
     tasks = [user_client.run_until_disconnected()]
-    if control_bot and BOT_TOKEN:
+    if control_started:
         tasks.append(control_bot.run_until_disconnected())
 
     await asyncio.gather(*tasks)
